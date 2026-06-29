@@ -92,8 +92,8 @@ export default function AdminPage() {
         <div style={{ margin: '4px 0 24px', padding: '12px', border: '1px solid var(--line2)', borderRadius: 12 }}>
           <label style={{ fontWeight: 600 }}>Entrada tardía</label>
           <p className="sub" style={{ margin: '4px 0 12px' }}>
-            Habilita a alguien para hacer el cuadro tras el cierre. Podrá editar las ranuras aún sin
-            resultado, pero <b>no puntuará las ramas que ya estaban decididas</b> cuando lo actives.
+            Habilita a alguien para hacer el cuadro tras el cierre. Podrá completarlo entero, pero
+            <b>no puntuará los partidos que ya estaban jugados</b> cuando lo actives; lo que siga por jugar sí le suma.
           </p>
           {users.map(u => (
             <div key={u.id} className="admin-row" style={{ gridTemplateColumns: '1fr auto auto' }}>

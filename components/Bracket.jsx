@@ -114,9 +114,14 @@ export default function Bracket({ user, profile, viewUser = null, readOnly = fal
   const isLate = !!lateAt;
   const matchLocked = useCallback((m) => {
     if (!m) return true;
-    if (isLate) return !!m.result_set_at; // tardío: bloqueado solo si ya hay resultado
+    if (isLate) {
+      if (!m.result_set_at) return false; // aún por jugar: editable
+      // Ya resuelto: editable si se decidió ANTES de entrar (para armar su rama, no puntúa);
+      // bloqueado si se decidió DESPUÉS de entrar (ya no puede cambiarlo a posteriori).
+      return new Date(m.result_set_at).getTime() >= new Date(lateAt).getTime();
+    }
     return isLocked(m);
-  }, [isLate]);
+  }, [isLate, lateAt]);
 
   const pick = useCallback(async (matchId, team) => {
     if (readOnly) return;
@@ -232,8 +237,8 @@ export default function Bracket({ user, profile, viewUser = null, readOnly = fal
           ) : isLate ? (
             <>
               <span>
-                ⏱️ <b>Entrada tardía.</b> Puedes completar el cuadro, pero las ramas cuyo resultado
-                ya se conocía cuando entraste <b>no te puntúan</b> (marcadas con 🚫). Sí compites por todo lo que sigue por decidir.
+                ⏱️ <b>Entrada tardía.</b> Puedes completar el cuadro, pero los partidos cuyo resultado
+                ya se conocía cuando entraste <b>no te puntúan</b> (marcados con 🚫). Todo lo que aún está por jugar sí te suma.
               </span>
               {deadline && (
                 <button className="act solid" onClick={toggleFix}>{fixed ? 'Cambiar mi cuadro' : 'Fijar mis apuestas'}</button>

@@ -1,11 +1,12 @@
 -- ============================================================================
--- MIGRACIÓN: ENTRADA TARDÍA con "bloqueo de rama completa".
+-- MIGRACIÓN: ENTRADA TARDÍA con "bloqueo por partido".
 -- Aplícala SOLO si ya ejecutaste schema.sql antes y no quieres perder datos.
 --
 -- Idea: un usuario puede ser habilitado para hacer el cuadro DESPUÉS del cierre,
--- pero NO cobra ninguna ranura cuya rama (ella o cualquier alimentador, hacia abajo)
--- ya tuviera resultado conocido ANTES de que entrara. Así no gana puntos por
--- información que ya existía cuando se sentó a rellenar el cuadro.
+-- pero NO cobra SOLO las ranuras cuyo resultado ya se conocía cuando entró.
+-- Los partidos aún por jugar SÍ puntúan, aunque sean de la rama de un equipo que
+-- ya había ganado antes (predecir esos es incierto para todos por igual).
+-- Puede marcar los partidos ya jugados (para construir su cuadro) pero no le suman.
 -- ============================================================================
 
 -- 1) MARCA DE ENTRADA TARDÍA en el perfil (null = jugador normal).
@@ -34,8 +35,11 @@ create trigger trg_stamp_result before update on public.matches
 update public.matches set result_set_at = now()
   where actual_winner is not null and result_set_at is null;
 
--- 3) RLS: dejar que un usuario tardío edite cualquier ranura cuyo resultado AÚN no exista,
---    además de la ventana normal (antes del kickoff) para el resto.
+-- 3) RLS: un usuario tardío puede editar:
+--      - cualquier ranura aún sin resultado (futuro), y
+--      - las ranuras resueltas ANTES de que entrara (para construir su rama; no puntúan).
+--    NO puede tocar ranuras resueltas DESPUÉS de entrar (evita cambiar el pick a posteriori).
+--    El resto de usuarios mantiene la ventana normal (antes del kickoff).
 drop policy if exists "picks_insert_before_kickoff" on public.picks;
 create policy "picks_insert_before_kickoff" on public.picks for insert
   with check (
@@ -45,7 +49,8 @@ create policy "picks_insert_before_kickoff" on public.picks for insert
       or exists (
         select 1 from public.profiles p, public.matches m
         where p.id = auth.uid() and p.late_entry_at is not null
-          and m.id = match_id and m.result_set_at is null
+          and m.id = match_id
+          and (m.result_set_at is null or m.result_set_at < p.late_entry_at)
       )
     )
   );
@@ -60,7 +65,8 @@ create policy "picks_update_before_kickoff" on public.picks for update
       or exists (
         select 1 from public.profiles p, public.matches m
         where p.id = auth.uid() and p.late_entry_at is not null
-          and m.id = match_id and m.result_set_at is null
+          and m.id = match_id
+          and (m.result_set_at is null or m.result_set_at < p.late_entry_at)
       )
     )
   );
@@ -79,27 +85,11 @@ end;
 $$;
 grant execute on function public.set_late_entry(uuid, boolean) to authenticated;
 
--- 5) CLASIFICACIÓN con bloqueo de rama para entradas tardías.
+-- 5) CLASIFICACIÓN con bloqueo POR PARTIDO para entradas tardías.
 create or replace function public.leaderboard()
 returns table (user_id uuid, username text, points bigint, aciertos int, resueltos int)
 language sql security definer set search_path = public as $$
-  with recursive
-  -- Subárbol de cada ranura: ella misma + todas las que la alimentan (hacia abajo).
-  sub(root, node) as (
-    select id, id from public.matches
-    union all
-    select s.root, m.id
-    from sub s
-    join public.matches p on p.id = s.node
-    join public.matches m on m.id = p.feeder_a or m.id = p.feeder_b
-  ),
-  -- Primer resultado conocido dentro de la rama de cada ranura.
-  branch as (
-    select s.root as match_id, min(mm.result_set_at) as first_resolved
-    from sub s
-    join public.matches mm on mm.id = s.node
-    group by s.root
-  ),
+  with
   parent as (
     select c.id as child_id, p.id as parent_id
     from public.matches c
@@ -109,9 +99,11 @@ language sql security definer set search_path = public as $$
     select
       pk.user_id,
       m.points,
-      -- Rama contaminada: el usuario entró tarde y la rama ya tenía resultado antes de entrar.
-      (upr.late_entry_at is not null and b.first_resolved is not null
-        and b.first_resolved < upr.late_entry_at) as tainted,
+      -- Contaminada: el usuario entró tarde y el resultado que decide esta ranura ya
+      -- se conocía cuando entró. (En condicionales, el que decide es el partido siguiente.)
+      (upr.late_entry_at is not null
+        and (case when m.conditional then pm.result_set_at else m.result_set_at end) is not null
+        and (case when m.conditional then pm.result_set_at else m.result_set_at end) < upr.late_entry_at) as tainted,
       case
         when m.points = 0 then false
         when m.conditional = false then (m.actual_winner is not null and pk.predicted_winner = m.actual_winner)
@@ -124,7 +116,6 @@ language sql security definer set search_path = public as $$
     from public.picks pk
     join public.matches m on m.id = pk.match_id
     join public.profiles upr on upr.id = pk.user_id
-    left join branch b on b.match_id = m.id
     left join parent par on par.child_id = m.id
     left join public.matches pm on pm.id = par.parent_id
     left join public.picks ppk on ppk.user_id = pk.user_id and ppk.match_id = par.parent_id
