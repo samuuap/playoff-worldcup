@@ -93,7 +93,7 @@ export default function AdminPage() {
           <label style={{ fontWeight: 600 }}>Entrada tardía</label>
           <p className="sub" style={{ margin: '4px 0 12px' }}>
             Habilita a alguien para hacer el cuadro tras el cierre. Podrá completarlo entero, pero
-            <b>no puntuará los partidos que ya estaban jugados</b> cuando lo actives; lo que siga por jugar sí le suma.
+            <b>no puntuará apostar a que gana un equipo que ya se sabía vivo</b> cuando lo actives; apostar a que pierde, o por equipos aún sin definir, sí le suma.
           </p>
           {users.map(u => (
             <div key={u.id} className="admin-row" style={{ gridTemplateColumns: '1fr auto auto' }}>

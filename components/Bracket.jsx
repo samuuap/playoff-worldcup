@@ -145,7 +145,7 @@ export default function Bracket({ user, profile, viewUser = null, readOnly = fal
     setSaving(false);
   }, [matches, order, picks, user.id, fixed, matchLocked, readOnly]);
 
-  const tainted = taintedSet(matches, order, lateAt);
+  const tainted = taintedSet(matches, order, lateAt, picks);
   const eliminated = eliminatedTeams(matches, order);
   const score = computeScore(matches, order, picks, tainted);
   const deadline = deadlineOf(matches, order);
@@ -198,7 +198,7 @@ export default function Bracket({ user, profile, viewUser = null, readOnly = fal
     return (
       <div className="match" id={'card-' + m.id} key={m.id} ref={(el) => { cardRefs.current[m.id] = el; }}>
         <div className="m-top">
-          <span className="m-tag" title={dead ? 'Esta rama ya estaba decidida cuando entraste: no puntúa para ti' : m.conditional ? 'Cuenta según el siguiente partido de ese equipo' : undefined}>
+          <span className="m-tag" title={dead ? 'Apostaste por un equipo que ya se sabía vivo cuando entraste: no puntúa para ti' : m.conditional ? 'Cuenta según el siguiente partido de ese equipo' : undefined}>
             {tag} · +{m.points}{m.conditional ? ' ⚡' : ''}{dead ? ' · 🚫 no puntúa' : ''}
           </span>
           <span className={'timer' + (cd.locked ? ' lock' : '')}>{cd.text}</span>
@@ -237,8 +237,8 @@ export default function Bracket({ user, profile, viewUser = null, readOnly = fal
           ) : isLate ? (
             <>
               <span>
-                ⏱️ <b>Entrada tardía.</b> Puedes completar el cuadro, pero los partidos cuyo resultado
-                ya se conocía cuando entraste <b>no te puntúan</b> (marcados con 🚫). Todo lo que aún está por jugar sí te suma.
+                ⏱️ <b>Entrada tardía.</b> Puedes completar el cuadro, pero apostar a que <b>gana</b> un equipo
+                que ya se sabía vivo cuando entraste <b>no te puntúa</b> (marcado con 🚫). Apostar a que <b>pierde</b>, y todo lo demás, sí te suma.
               </span>
               {deadline && (
                 <button className="act solid" onClick={toggleFix}>{fixed ? 'Cambiar mi cuadro' : 'Fijar mis apuestas'}</button>

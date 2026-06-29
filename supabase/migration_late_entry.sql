@@ -1,12 +1,13 @@
 -- ============================================================================
--- MIGRACIÓN: ENTRADA TARDÍA con "bloqueo por partido".
+-- MIGRACIÓN: ENTRADA TARDÍA — "no se cobra por rodar al ganador ya conocido".
 -- Aplícala SOLO si ya ejecutaste schema.sql antes y no quieres perder datos.
 --
 -- Idea: un usuario puede ser habilitado para hacer el cuadro DESPUÉS del cierre,
--- pero NO cobra SOLO las ranuras cuyo resultado ya se conocía cuando entró.
--- Los partidos aún por jugar SÍ puntúan, aunque sean de la rama de un equipo que
--- ya había ganado antes (predecir esos es incierto para todos por igual).
--- Puede marcar los partidos ya jugados (para construir su cuadro) pero no le suman.
+-- pero NO cobra una ranura donde apostó a que GANA un equipo que ya se sabía vivo
+-- (con victoria registrada) cuando entró: esa información era gratis. En cambio,
+-- apostar a que ese equipo PIERDE (eligiendo a su rival), o por equipos cuyo
+-- destino aún no se conocía, SÍ puntúa. Así solo pierde los puntos de "rodar" al
+-- ganador conocido. Puede marcar los partidos ya jugados para construir su cuadro.
 -- ============================================================================
 
 -- 1) MARCA DE ENTRADA TARDÍA en el perfil (null = jugador normal).
@@ -99,11 +100,15 @@ language sql security definer set search_path = public as $$
     select
       pk.user_id,
       m.points,
-      -- Contaminada: el usuario entró tarde y el resultado que decide esta ranura ya
-      -- se conocía cuando entró. (En condicionales, el que decide es el partido siguiente.)
-      (upr.late_entry_at is not null
-        and (case when m.conditional then pm.result_set_at else m.result_set_at end) is not null
-        and (case when m.conditional then pm.result_set_at else m.result_set_at end) < upr.late_entry_at) as tainted,
+      -- Contaminada: el usuario entró tarde y apostó a que GANA un equipo que ya se
+      -- sabía vivo (tenía una victoria registrada) cuando entró. No se cobra por rodar
+      -- al ganador conocido; apostar a que pierde (eligiendo a su rival) sí puntúa.
+      (upr.late_entry_at is not null and exists (
+        select 1 from public.matches kw
+        where kw.actual_winner = pk.predicted_winner
+          and kw.result_set_at is not null
+          and kw.result_set_at < upr.late_entry_at
+      )) as tainted,
       case
         when m.points = 0 then false
         when m.conditional = false then (m.actual_winner is not null and pk.predicted_winner = m.actual_winner)
