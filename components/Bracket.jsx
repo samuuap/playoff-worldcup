@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient';
 import Header from '@/components/Header';
 import {
   LAYOUT, ISO, participants, isLocked, revalidate, computeScore, countdownLabel, flagAbbr,
-  deadlineOf, fmtDeadline, taintedSet,
+  deadlineOf, fmtDeadline, taintedSet, eliminatedTeams,
 } from '@/lib/bracket';
 
 function Flag({ team }) {
@@ -141,6 +141,7 @@ export default function Bracket({ user, profile, viewUser = null, readOnly = fal
   }, [matches, order, picks, user.id, fixed, matchLocked, readOnly]);
 
   const tainted = taintedSet(matches, order, lateAt);
+  const eliminated = eliminatedTeams(matches, order);
   const score = computeScore(matches, order, picks, tainted);
   const deadline = deadlineOf(matches, order);
   const deadlinePassed = deadline ? Date.now() >= deadline.getTime() : false;
@@ -160,14 +161,19 @@ export default function Bracket({ user, profile, viewUser = null, readOnly = fal
     const locked = matchLocked(m);
     const known = !!team;
     const picked = team && picks[m.id] === team;
-    const isAct = m.actual_winner && team === m.actual_winner;
+    const isAct = m.actual_winner && team === m.actual_winner;     // ganó ESTA ranura
+    // Tachado: el equipo está eliminado del torneo y NO es el ganador de esta ranura
+    // (así no tachamos al equipo en la ronda que sí superó; sí en las siguientes).
+    const dead = !isAct && !!(team && eliminated.has(team));
     let cls = 'team';
     if (picked) cls += ' picked';
     if (!known) cls += ' empty';
     if (!known || locked || disabledAll) cls += ' disabled';
     if (isAct) cls += ' actual';
-    let mark = '';
-    if (m.actual_winner && picked) { cls += m.actual_winner === team ? ' correct' : ' wrong'; mark = m.actual_winner === team ? '✓' : '✗'; }
+    if (dead) cls += ' eliminated';
+    // Resalta el resultado del pick del usuario: verde si acertó, rojo si su equipo cayó.
+    if (picked && (isAct || dead)) cls += isAct ? ' correct' : ' wrong';
+    const mark = isAct ? '✓' : dead ? '✗' : '';
     return (
       <button key={idx} className={cls} disabled={!known || locked || disabledAll} onClick={() => pick(m.id, team)}>
         <Flag team={team} />
@@ -199,12 +205,14 @@ export default function Bracket({ user, profile, viewUser = null, readOnly = fal
 
   function renderCenter() {
     const who = picks['F'] || '';
+    const champWon = !!(who && matches['F']?.actual_winner && who === matches['F'].actual_winner);
+    const champDead = !!(who && !champWon && eliminated.has(who)); // tu campeón quedó eliminado
     return (
       <div className="round center" key="center">
-        <div className="champ">
+        <div className={'champ' + (champWon ? ' won' : '') + (champDead ? ' dead' : '')}>
           <div className="trophy">{who ? <Flag team={who} /> : '🏆'}</div>
-          <div className="who">{who || '—'}</div>
-          <div className="cap">{who ? 'tu campeón' : 'predice la final'}</div>
+          <div className="who">{who || '—'}{champWon ? ' ✓' : champDead ? ' ✗' : ''}</div>
+          <div className="cap">{champWon ? '¡campeón acertado!' : champDead ? 'tu campeón cayó' : who ? 'tu campeón' : 'predice la final'}</div>
         </div>
         <div className="round-head">Final</div>
         {renderMatch('F')}

@@ -73,11 +73,28 @@ button.act:disabled{opacity:.5;cursor:default}
 .flag .abbr{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;color:var(--muted)}
 .flag.q{border-style:dashed}
 .team.picked .flag{border-color:var(--pick);box-shadow:0 0 0 2px rgba(79,240,180,.4),0 0 14px rgba(79,240,180,.35)}
-.team.actual .flag{border-color:var(--gold);box-shadow:0 0 0 2px rgba(255,210,74,.45)}
 .team .nm{flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .team.picked .nm{font-weight:700}
 .team .mark{font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;width:14px;text-align:center}
-.team.correct .mark{color:var(--pick)} .team.wrong .mark{color:var(--danger)}
+
+/* GANADOR de la ranura: destacado en oro */
+.team.actual{background:rgba(255,210,74,.16);border-color:var(--gold)}
+.team.actual .nm{font-weight:800;color:#fff}
+.team.actual .flag{border-color:var(--gold);box-shadow:0 0 0 2px rgba(255,210,74,.55),0 0 16px rgba(255,210,74,.5)}
+.team.actual .mark{color:var(--gold)}
+
+/* ELIMINADO: tachado, apagado y en gris (se arrastra a las fases siguientes) */
+.team.eliminated{opacity:.55}
+.team.eliminated .nm{text-decoration:line-through;text-decoration-thickness:2px;color:var(--muted)}
+.team.eliminated .flag{border-color:var(--danger);filter:grayscale(.85)}
+.team.eliminated .mark{color:var(--danger)}
+
+/* Resultado del PICK del usuario: acierto (verde) / fallo (rojo) */
+.team.correct{border-color:var(--pick);background:rgba(79,240,180,.16)}
+.team.correct .mark{color:var(--pick)}
+.team.wrong{border-color:var(--danger);background:rgba(255,122,122,.16);opacity:1}
+.team.wrong .nm{color:#fff}
+.team.wrong .mark{color:var(--danger)}
 
 /* Champion */
 .champ{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:14px}
@@ -87,6 +104,14 @@ button.act:disabled{opacity:.5;cursor:default}
 .trophy img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .champ .who{font-family:'Archivo',sans-serif;font-weight:900;font-size:18px;text-align:center;color:var(--gold);min-height:22px}
 .champ .cap{font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase}
+
+/* Campeón eliminado: trofeo apagado y nombre tachado */
+.champ.dead .trophy{border-color:var(--danger);box-shadow:0 0 24px rgba(255,122,122,.3);filter:grayscale(.85)}
+.champ.dead .who{color:var(--muted);text-decoration:line-through;text-decoration-thickness:2px}
+.champ.dead .cap{color:var(--danger)}
+/* Campeón acertado: trofeo a tope */
+.champ.won .trophy{box-shadow:0 0 46px rgba(255,210,74,.6)}
+.champ.won .cap{color:var(--gold)}
 
 /* Auth / panels */
 .center-screen{min-height:80vh;display:grid;place-items:center;padding:18px}
