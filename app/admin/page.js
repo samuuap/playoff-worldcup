@@ -22,6 +22,7 @@ export default function AdminPage() {
   const [savedId, setSavedId] = useState('');
   const [err, setErr] = useState('');
   const [globalDl, setGlobalDl] = useState('');
+  const [users, setUsers] = useState([]);
 
   useEffect(() => { if (user === null) router.replace('/login'); }, [user, router]);
   useEffect(() => { if (profile && !profile.is_admin) router.replace('/'); }, [profile, router]);
@@ -35,6 +36,18 @@ export default function AdminPage() {
       setMatches(mo); setOrder(ord);
     });
   }, [user]);
+
+  function loadUsers() {
+    supabase.from('profiles').select('id,username,late_entry_at,is_admin').order('username')
+      .then(({ data, error }) => { if (error) setErr(error.message); else setUsers(data || []); });
+  }
+  useEffect(() => { if (user) loadUsers(); }, [user]);
+
+  async function toggleLate(id, enabled) {
+    const { error } = await supabase.rpc('set_late_entry', { target_user: id, enable: !enabled });
+    if (error) { setErr(error.message); return; }
+    loadUsers();
+  }
 
   function update(id, patch) { setMatches(m => ({ ...m, [id]: { ...m[id], ...patch } })); }
 
@@ -74,6 +87,25 @@ export default function AdminPage() {
             <input type="datetime-local" value={globalDl} onChange={e => setGlobalDl(e.target.value)} />
           </div>
           <button className="act solid" onClick={applyGlobal}>{savedId === 'GLOBAL' ? '✓ Aplicado' : 'Aplicar a todos'}</button>
+        </div>
+
+        <div style={{ margin: '4px 0 24px', padding: '12px', border: '1px solid var(--line2)', borderRadius: 12 }}>
+          <label style={{ fontWeight: 600 }}>Entrada tardía</label>
+          <p className="sub" style={{ margin: '4px 0 12px' }}>
+            Habilita a alguien para hacer el cuadro tras el cierre. Podrá editar las ranuras aún sin
+            resultado, pero <b>no puntuará las ramas que ya estaban decididas</b> cuando lo actives.
+          </p>
+          {users.map(u => (
+            <div key={u.id} className="admin-row" style={{ gridTemplateColumns: '1fr auto auto' }}>
+              <span className="id" style={{ minWidth: 0 }}>{u.username}{u.is_admin ? ' · admin' : ''}</span>
+              <span style={{ fontSize: 12, color: u.late_entry_at ? 'var(--pick)' : 'var(--muted)' }}>
+                {u.late_entry_at ? '⏱️ tardío activo' : 'normal'}
+              </span>
+              <button className="act" onClick={() => toggleLate(u.id, !!u.late_entry_at)}>
+                {u.late_entry_at ? 'Quitar tardío' : 'Habilitar tarde'}
+              </button>
+            </div>
+          ))}
         </div>
 
         {err && <div className="err-bar">{err}</div>}

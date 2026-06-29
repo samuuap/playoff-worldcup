@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient';
 import Header from '@/components/Header';
 import {
   LAYOUT, ISO, participants, isLocked, revalidate, computeScore, countdownLabel, flagAbbr,
-  deadlineOf, fmtDeadline,
+  deadlineOf, fmtDeadline, taintedSet,
 } from '@/lib/bracket';
 
 function Flag({ team }) {
@@ -106,9 +106,18 @@ export default function Bracket({ user, profile }) {
 
   useLayoutEffect(() => { computePaths(); }, [computePaths, layoutVer]);
 
+  // Entrada tardía: el usuario fue habilitado tras el cierre. Puede editar cualquier
+  // ranura cuyo resultado aún no exista, pero no puntúa las ramas ya decididas.
+  const isLate = !!profile?.late_entry_at;
+  const matchLocked = useCallback((m) => {
+    if (!m) return true;
+    if (isLate) return !!m.result_set_at; // tardío: bloqueado solo si ya hay resultado
+    return isLocked(m);
+  }, [isLate]);
+
   const pick = useCallback(async (matchId, team) => {
     const m = matches[matchId];
-    if (!m || isLocked(m) || fixed || picks[matchId] === team) return;
+    if (!m || matchLocked(m) || fixed || picks[matchId] === team) return;
     const prev = picks;
     const next = revalidate(matches, order, { ...picks, [matchId]: team });
     setPicks(next);
@@ -125,12 +134,14 @@ export default function Bracket({ user, profile }) {
     const removed = Object.keys(prev).filter(k => !(k in next));
     if (removed.length) await supabase.from('picks').delete().eq('user_id', user.id).in('match_id', removed);
     setSaving(false);
-  }, [matches, order, picks, user.id, fixed]);
+  }, [matches, order, picks, user.id, fixed, matchLocked]);
 
-  const score = computeScore(matches, order, picks);
+  const tainted = taintedSet(matches, order, profile?.late_entry_at);
+  const score = computeScore(matches, order, picks, tainted);
   const deadline = deadlineOf(matches, order);
   const deadlinePassed = deadline ? Date.now() >= deadline.getTime() : false;
-  const disabledAll = fixed || deadlinePassed;
+  // El tardío no se rige por el cierre global; cada ranura se bloquea al conocerse su resultado.
+  const disabledAll = isLate ? fixed : (fixed || deadlinePassed);
 
   async function toggleFix() {
     const next = !fixed;
@@ -142,7 +153,7 @@ export default function Bracket({ user, profile }) {
   }
 
   function renderPill(m, team, idx) {
-    const locked = isLocked(m);
+    const locked = matchLocked(m);
     const known = !!team;
     const picked = team && picks[m.id] === team;
     const isAct = m.actual_winner && team === m.actual_winner;
@@ -168,11 +179,12 @@ export default function Bracket({ user, profile }) {
     const parts = participants(m, picks);
     const cd = countdownLabel(m);
     const tag = m.round === 'F' ? 'FINAL' : m.id.replace('-', ' ');
+    const dead = isLate && tainted.has(m.id);
     return (
       <div className="match" id={'card-' + m.id} key={m.id} ref={(el) => { cardRefs.current[m.id] = el; }}>
         <div className="m-top">
-          <span className="m-tag" title={m.conditional ? 'Cuenta según el siguiente partido de ese equipo' : undefined}>
-            {tag} · +{m.points}{m.conditional ? ' ⚡' : ''}
+          <span className="m-tag" title={dead ? 'Esta rama ya estaba decidida cuando entraste: no puntúa para ti' : m.conditional ? 'Cuenta según el siguiente partido de ese equipo' : undefined}>
+            {tag} · +{m.points}{m.conditional ? ' ⚡' : ''}{dead ? ' · 🚫 no puntúa' : ''}
           </span>
           <span className={'timer' + (cd.locked ? ' lock' : '')}>{cd.text}</span>
         </div>
@@ -203,7 +215,17 @@ export default function Bracket({ user, profile }) {
 
       {order.length > 0 && (
         <div className="banner" style={{ justifyContent: 'space-between' }}>
-          {deadlinePassed ? (
+          {isLate ? (
+            <>
+              <span>
+                ⏱️ <b>Entrada tardía.</b> Puedes completar el cuadro, pero las ramas cuyo resultado
+                ya se conocía cuando entraste <b>no te puntúan</b> (marcadas con 🚫). Sí compites por todo lo que sigue por decidir.
+              </span>
+              {deadline && (
+                <button className="act solid" onClick={toggleFix}>{fixed ? 'Cambiar mi cuadro' : 'Fijar mis apuestas'}</button>
+              )}
+            </>
+          ) : deadlinePassed ? (
             <span>🔒 Las apuestas están cerradas.</span>
           ) : (
             <>
