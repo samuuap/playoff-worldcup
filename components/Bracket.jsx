@@ -19,7 +19,10 @@ function Flag({ team }) {
   );
 }
 
-export default function Bracket({ user, profile }) {
+export default function Bracket({ user, profile, viewUser = null, readOnly = false }) {
+  // En modo lectura mostramos el cuadro de otro usuario (viewUser); si no, el propio.
+  const targetId = readOnly && viewUser ? viewUser.id : user.id;
+  const lateAt = readOnly && viewUser ? viewUser.late_entry_at : profile?.late_entry_at;
   const [matches, setMatches] = useState({});
   const [order, setOrder] = useState([]);
   const [picks, setPicks] = useState({});
@@ -43,12 +46,12 @@ export default function Bracket({ user, profile }) {
       if (e1) { setErr(e1.message); return; }
       const mo = {}, ord = [];
       for (const m of ms) { mo[m.id] = m; ord.push(m.id); }
-      const { data: ps } = await supabase.from('picks').select('match_id,predicted_winner').eq('user_id', user.id);
+      const { data: ps } = await supabase.from('picks').select('match_id,predicted_winner').eq('user_id', targetId);
       const pk = {}; (ps || []).forEach(p => { pk[p.match_id] = p.predicted_winner; });
       setMatches(mo); setOrder(ord); setPicks(pk);
       setLayoutVer(v => v + 1);
     })();
-  }, [user.id]);
+  }, [targetId]);
 
   // Reloj de cuenta atrás
   useEffect(() => {
@@ -108,7 +111,7 @@ export default function Bracket({ user, profile }) {
 
   // Entrada tardía: el usuario fue habilitado tras el cierre. Puede editar cualquier
   // ranura cuyo resultado aún no exista, pero no puntúa las ramas ya decididas.
-  const isLate = !!profile?.late_entry_at;
+  const isLate = !!lateAt;
   const matchLocked = useCallback((m) => {
     if (!m) return true;
     if (isLate) return !!m.result_set_at; // tardío: bloqueado solo si ya hay resultado
@@ -116,6 +119,7 @@ export default function Bracket({ user, profile }) {
   }, [isLate]);
 
   const pick = useCallback(async (matchId, team) => {
+    if (readOnly) return;
     const m = matches[matchId];
     if (!m || matchLocked(m) || fixed || picks[matchId] === team) return;
     const prev = picks;
@@ -134,14 +138,14 @@ export default function Bracket({ user, profile }) {
     const removed = Object.keys(prev).filter(k => !(k in next));
     if (removed.length) await supabase.from('picks').delete().eq('user_id', user.id).in('match_id', removed);
     setSaving(false);
-  }, [matches, order, picks, user.id, fixed, matchLocked]);
+  }, [matches, order, picks, user.id, fixed, matchLocked, readOnly]);
 
-  const tainted = taintedSet(matches, order, profile?.late_entry_at);
+  const tainted = taintedSet(matches, order, lateAt);
   const score = computeScore(matches, order, picks, tainted);
   const deadline = deadlineOf(matches, order);
   const deadlinePassed = deadline ? Date.now() >= deadline.getTime() : false;
   // El tardío no se rige por el cierre global; cada ranura se bloquea al conocerse su resultado.
-  const disabledAll = isLate ? fixed : (fixed || deadlinePassed);
+  const disabledAll = readOnly || (isLate ? fixed : (fixed || deadlinePassed));
 
   async function toggleFix() {
     const next = !fixed;
@@ -215,7 +219,9 @@ export default function Bracket({ user, profile }) {
 
       {order.length > 0 && (
         <div className="banner" style={{ justifyContent: 'space-between' }}>
-          {isLate ? (
+          {readOnly ? (
+            <span>👁️ Estás viendo el cuadro de <b>@{viewUser?.username}</b> (solo lectura){isLate ? ' · entrada tardía' : ''}.</span>
+          ) : isLate ? (
             <>
               <span>
                 ⏱️ <b>Entrada tardía.</b> Puedes completar el cuadro, pero las ramas cuyo resultado
@@ -242,7 +248,7 @@ export default function Bracket({ user, profile }) {
         </div>
       )}
 
-      {order.length > 0 && (
+      {order.length > 0 && !readOnly && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 6, fontSize: 12, margin: '0 4px 8px', color: 'var(--muted)' }}>
           {saving
             ? <span style={{ color: 'var(--pick)' }}>⏳ Guardando…</span>

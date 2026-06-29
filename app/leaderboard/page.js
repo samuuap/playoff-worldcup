@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useUser } from '@/lib/useUser';
 import { supabase } from '@/lib/supabaseClient';
 import Header from '@/components/Header';
@@ -27,15 +28,20 @@ export default function LeaderboardPage() {
       <Header profile={profile} />
       <div className="panel wide" style={{ margin: '0 auto' }}>
         <h2>Clasificación</h2>
-        <p className="sub">Puntos por aciertos ya resueltos.</p>
+        <p className="sub">Puntos por aciertos ya resueltos. Toca un nombre para ver su cuadro.</p>
         {err && <div className="err-bar">{err}</div>}
         {!rows ? <p className="sub">Cargando…</p> : rows.map((r, i) => (
-          <div key={r.user_id} className={'lb-row' + (r.user_id === user.id ? ' me' : '')}>
+          <Link
+            href={`/cuadro/${r.user_id}`}
+            key={r.user_id}
+            className={'lb-row' + (r.user_id === user.id ? ' me' : '')}
+            style={{ textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+          >
             <span className="rk">{i + 1}</span>
-            <span className="nm">{r.username}{r.user_id === user.id ? ' · tú' : ''}</span>
+            <span className="nm">{r.username}{r.user_id === user.id ? ' · tú' : ''} ›</span>
             <span className="ax">{r.aciertos} ✓</span>
             <span className="pp">{r.points} pts</span>
-          </div>
+          </Link>
         ))}
       </div>
     </div>
